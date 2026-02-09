@@ -646,6 +646,7 @@ async function loadInvoice(){
 
   el.innerHTML = inv.reverse().map(v=>`
     <div class="card mb-2 px-1 position-relative">
+				<div class="fw-bolder text-end mt-2 pe-2" style="font-size:.55rem">${v.timestamp}</div>
       <img src="${v.img}" class="img-fluid my-2 pointer w-auto" onclick="viewInvoice('${v.img}')">
       ${isAdmin ? `<span class="badge bg-danger pointer position-absolute top-0 end-0 m-1" data-id="${v.id}">Hapus</span>` : ``}
     </div>
