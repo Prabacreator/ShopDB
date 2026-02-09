@@ -1,4 +1,6 @@
-/* == DB == */
+/* =========================
+   == DB ==
+========================= */
 let db=null;
 const openDB=()=>new Promise((res,rej)=>{
   const req=indexedDB.open('pr@Ba',3);
@@ -39,12 +41,16 @@ const gets=s=>new Promise((res,rej)=>{
   r.onerror=e=>rej(e);
 });
 
-/* == SESSION == */
+/* =========================
+   == SESSION ==
+========================= */
 const setSession=d=>localStorage.setItem('session',JSON.stringify(d));
 const getSession=()=>JSON.parse(localStorage.getItem('session')||'null');
 const delSession=()=>localStorage.removeItem('session');
 
-/* == UI == */
+/* =========================
+   == UI HELPERS ==
+========================= */
 const m={
   get(el){
     if(typeof el==='string')
@@ -56,6 +62,7 @@ const m={
 };
 const $=i=>document.getElementById(i);
 const rp=n=>Number(n||0).toLocaleString('id-ID');
+
 const setUpper=el=> el.value=el.value.replace(/\b\w/g,c=>c.toUpperCase());
 const setPhone=el=>{
   let v=el.value.replace(/\D/g,'').slice(0,12);
@@ -63,30 +70,31 @@ const setPhone=el=>{
   else if(v.length>4) v=v.replace(/(\d{4})(\d+)/,'$1-$2');
   el.value=v;
 };
+
 document.querySelectorAll('input[type="text"],textarea')
   .forEach(el=>el.oninput=()=>setUpper(el));
 document.querySelectorAll('input[type="tel"]')
   .forEach(el=>el.oninput=()=>setPhone(el));
 document.querySelectorAll('input,textarea')
-  .forEach(el=>el.onclick=()=>el.value='');
-  
+  .forEach(el=>el.onclick=()=>el.select());
 
 const showLoading=()=>Swal.fire({title:'Loading...',allowOutsideClick:false,showConfirmButton:false,didOpen:()=>Swal.showLoading()});
 const hideLoading=()=>Swal.close();
 const ok=t=>Swal.fire({icon:'success',text:t,showConfirmButton:false,timer:1200});
 const err=t=>Swal.fire({icon:'info',text:t,showConfirmButton:false,timer:1200});
 
-
-/* == USER / AUTH == */
+/* =========================
+   == USER / AUTH ==
+========================= */
 const btnAddUser = $('addUser');
 const btnDelUser = $('delUser');
-const user    = $('username');
-const phone   = $('telphone');
-const addr    = $('address');
+const user = $('username');
+const telp = $('telphone');
+const addr = $('address');
 
 btnAddUser.onclick = async ()=>{
   const u = user.value.trim();
-  const t = phone.value.trim();
+  const t = telp.value.trim();
   const a = addr.value.trim();
 
   if(!u || !t || !a) return err('Silakan isi data dg lengkap');
@@ -103,16 +111,19 @@ btnAddUser.onclick = async ()=>{
 };
 
 btnDelUser.onclick = async ()=>{
-  await delSession();
+  delSession();
   location.reload();
-}
+};
 
-
-/* == STATE == */
+/* =========================
+   == STATE ==
+========================= */
 let imgData = null;
 let editId  = null;
 
-/* == ELEMENT == */
+/* =========================
+   == ELEMENT ==
+========================= */
 const pdc  = $('pdc');
 const prc  = $('prc');
 const stk  = $('stk');
@@ -122,8 +133,11 @@ const dels = $('del');
 const enter= $('enter');
 const table= $('tableOrder');
 const btnAddProduct = $('btnAddProduct');
+const btnInv= $('btnInv');
 
-/* == API == */
+/* =========================
+   == API ==
+========================= */
 const getProduct = () => gets('product');
 const addProduct = dt => add('product', dt);
 const setProduct = dt => put('product', dt);
@@ -139,21 +153,24 @@ const getInvoice = () => gets('invoice');
 const addInvoice = dt => add('invoice', dt);
 const delInvoice = id => del('invoice', id);
 
-/* == ROLE APPLY == */
+/* =========================
+   == ROLE APPLY ==
+========================= */
 function applyRole(){
   const s = getSession();
   const isAdmin = s?.role === 'admin';
 
   btnAddProduct.classList.toggle('d-none', !isAdmin);
 
-  /* admin tidak pakai cart */
   if(isAdmin){
     enter.classList.add('d-none');
     table.innerHTML = '';
   }
 }
 
-/* == IMAGE PREVIEW == */
+/* =========================
+   == IMAGE PREVIEW ==
+========================= */
 function viewPicture(input){
   const f = input.files[0];
   if(!f) return;
@@ -166,7 +183,9 @@ function viewPicture(input){
   r.readAsDataURL(f);
 }
 
-/* == SAVE PRODUCT (ADMIN ONLY) == */
+/* =========================
+   == SAVE PRODUCT (ADMIN ONLY) ==
+========================= */
 async function saveProduct(){
   const s = getSession();
   if(s?.role!=='admin') return err('Akses ditolak');
@@ -199,7 +218,9 @@ async function saveProduct(){
   m.show('#pageProduct');
 }
 
-/* == RESET FORM == */
+/* =========================
+   == RESET FORM ==
+========================= */
 function resetForm(){
   editId = null;
   imgData = null;
@@ -210,7 +231,9 @@ function resetForm(){
   dels.classList.add('d-none');
 }
 
-/* == LOAD PRODUCT == */
+/* =========================
+   == LOAD PRODUCT ==
+========================= */
 async function loadProduct(){
   const el = $('loadProduct');
   if(!el) return;
@@ -245,9 +268,13 @@ async function loadProduct(){
       </div>
     </div>
   `).join('');
+  
+  btnInv.textContent= `${isAdmin ? 'Invoice' : 'Riwayat Transaksi'}`;
 }
 
-/* == EDIT PRODUCT (ADMIN ONLY) == */
+/* =========================
+   == EDIT PRODUCT ==
+========================= */
 async function editProduct(id){
   const s = getSession();
   if(s?.role!=='admin') return err('Akses ditolak');
@@ -288,7 +315,9 @@ async function editProduct(id){
   m.show('#formProduct');
 }
 
-/* == INPUT ORDER (USER ONLY) == */
+/* =========================
+   == INPUT ORDER ==
+========================= */
 async function enterOrder(id){
   const s = getSession();
   if(s?.role!=='user') return err('Hanya user yang dapat order');
@@ -314,7 +343,9 @@ async function enterOrder(id){
   tableOrder();
 }
 
-/* == TABLE ORDER (USER ONLY) == */
+/* =========================
+   == TABLE ORDER ==
+========================= */
 async function tableOrder(){
   const s = getSession();
   if(s?.role!=='user'){
@@ -335,6 +366,135 @@ async function tableOrder(){
   let total=0,no=1;
 
   el.innerHTML = `
+  <table class="tableOrder">
+    <thead>
+      <tr>
+        <th rowspan="2">No</th>
+        <th rowspan="2">Produk</th>
+        <th rowspan="2">Jml</th>
+        <th colspan="2">Harga</th>
+      </tr>
+      <tr>
+        <th>Satuan</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${order.map(v=>{
+        const sub=v.prc*v.qty; total+=sub;
+        return `
+        <tr data-id="${v.id}">
+          <td>${no++}</td>
+          <td>${v.pdc}</td>
+          <td class="pointer fw-bolder">${v.qty}</td>
+          <td>${rp(v.prc)}</td>
+          <td>${rp(sub)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="3">TOTAL</th>
+        <th colspan="2">Rp ${rp(total)}</th>
+      </tr>
+    </tfoot>
+  </table>`;
+
+  el.querySelectorAll('tbody tr').forEach(tr=>{
+    tr.onclick = async ()=>{
+      const id = +tr.dataset.id;
+      const order = await getOrder();
+      const or = order.find(x=>x.id===id);
+      if(!or) return;
+
+      const r = await Swal.fire({
+        title:or.pdc,
+        text:'Pilih aksi',
+        icon:'question',
+        showCancelButton:true,
+        confirmButtonText:'Edit Jml Product',
+        cancelButtonText:'Hapus',
+        reverseButtons:true
+      });
+
+      if(r.isConfirmed){
+        const {value:qty} = await Swal.fire({
+          title:'Ubah Jumlah Product',
+          input:'number',
+          inputValue:or.qty,
+          inputAttributes:{min:1},
+          showCancelButton:true,
+          inputValidator:v=>!v||v<1?'Qty minimal 1':null
+        });
+        if(!qty) return;
+
+        const product = await getProduct();
+        const pr = product.find(p=>p.id===or.productId);
+        if(qty>pr.stk) return err('Stock tidak cukup');
+
+        or.qty = +qty;
+        await setOrder(or);
+        tableOrder();
+      }
+
+      if(r.dismiss===Swal.DismissReason.cancel){
+        const c = await Swal.fire({
+          icon:'warning',
+          text:'Yakin hapus item?',
+          showCancelButton:true,
+          confirmButtonText:'Ya, hapus'
+        });
+        if(!c.isConfirmed) return;
+        await delOrder(id);
+        tableOrder();
+      }
+    };
+  });
+
+  enter.classList.remove('d-none');
+  enter.onclick = makeInvoice;
+}
+
+/* =========================
+   == CHECKOUT ==
+========================= */
+async function tableOrder(){
+  const s = getSession();
+  if(s?.role!=='user'){
+    table.innerHTML='';
+    enter.classList.add('d-none');
+    return;
+  }
+
+  const el = $('tableOrder');
+  el.innerHTML = '';
+
+  const order = await getOrder();
+  if(!order.length){
+    enter.classList.add('d-none');
+    return;
+  }
+
+  let total=0,no=1;
+
+  el.innerHTML = `
+  <div class="px-2" style="font-size:.75rem">
+    <div class="row">
+      <div class="col-3">Nama</div>
+      <div class="col-1">:</div>
+      <div class="col-8 fw-bolder">${s.username}</div>
+    </div>
+    <div class="row">
+      <div class="col-3">Phone</div>
+      <div class="col-1">:</div>
+      <div class="col-8">${s.phone}</div>
+    </div>
+    <div class="row">
+      <div class="col-3">Alamat</div>
+      <div class="col-1">:</div>
+      <div class="col-8">${s.address}</div>
+    </div>
+  </div>
   <table class="tableOrder">
     <thead>
       <tr>
@@ -462,13 +622,7 @@ async function makeInvoice(){
   const timestamp = new Date().toLocaleString('id-ID',{weekday:'long',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'
   });
 
-  await addInvoice({
-    timestamp,
-    user: s.username,
-    telp: s.telphone,
-    addr: s.address,
-    img
-  });
+  await addInvoice({timestamp,img});
   await removeAll();
   
   table.innerHTML='';
@@ -491,27 +645,8 @@ async function loadInvoice(){
   const isAdmin = s?.role === 'admin';
 
   el.innerHTML = inv.reverse().map(v=>`
-    <div class="card mb-2 position-relative">
-      <div class="card-header">
-        <div style="font-size:.75rem;text-align:justify;">
-          <div class="row">
-            <div class="col-3">Nama</div>
-            <div class="col-1">:</div>
-            <div class="col-8 fw-bolder">${s.username}</div>
-          </div>
-          <div class="row">
-            <div class="col-3">Phone</div>
-            <div class="col-1">:</div>
-            <div class="col-8">${s.phone}</div>
-          </div>
-          <div class="row">
-            <div class="col-3">Alamat</div>
-            <div class="col-1">:</div>
-            <div class="col-8">${s.address}</div>
-          </div>
-        </div>
-      </div>
-      <img src="${v.img}" class="img-fluid mb-2 pointer w-auto" onclick="viewInvoice('${v.img}')">
+    <div class="card mb-2 px-1 position-relative">
+      <img src="${v.img}" class="img-fluid my-2 pointer w-auto" onclick="viewInvoice('${v.img}')">
       ${isAdmin ? `<span class="badge bg-danger pointer position-absolute top-0 end-0 m-1" data-id="${v.id}">Hapus</span>` : ``}
     </div>
   `).join('');
@@ -543,7 +678,9 @@ function viewInvoice(src){
   });
 }
 
-/* == INIT == */
+/* =========================
+   == INIT ==
+========================= */
 (async()=>{
   await openDB();
   const s = getSession();
