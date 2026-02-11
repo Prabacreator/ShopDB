@@ -62,7 +62,7 @@ const m={
 };
 const $=i=>document.getElementById(i);
 const rp=n=>Number(n||0).toLocaleString('id-ID');
-
+const times = new Date().toLocaleString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'  ⏰ ['+new Date().toLocaleString('id-ID',{hour:'numeric',minute:'numeric'})+']';
 const setUpper=el=> el.value=el.value.replace(/\b\w/g,c=>c.toUpperCase());
 const setPhone=el=>{
   let v=el.value.replace(/\D/g,'').slice(0,12);
@@ -76,7 +76,7 @@ document.querySelectorAll('input[type="text"],textarea')
 document.querySelectorAll('input[type="tel"]')
   .forEach(el=>el.oninput=()=>setPhone(el));
 document.querySelectorAll('input,textarea')
-  .forEach(el=>el.onclick=()=>el.select());
+  .forEach(el=>el.onclick=()=>el.value='');
 
 const showLoading=()=>Swal.fire({title:'Loading...',allowOutsideClick:false,showConfirmButton:false,didOpen:()=>Swal.showLoading()});
 const hideLoading=()=>Swal.close();
@@ -84,8 +84,22 @@ const ok=t=>Swal.fire({icon:'success',text:t,showConfirmButton:false,timer:1200}
 const err=t=>Swal.fire({icon:'info',text:t,showConfirmButton:false,timer:1200});
 
 /* =========================
+   == BLOB HELPERS ==
+========================= */
+const blobToURL = b => b ? URL.createObjectURL(b) : '';
+const revokeURL = url => URL.revokeObjectURL(url);
+
+/* =========================
+   == STATE ==
+========================= */
+let stream=null;
+let imgData = null;
+let editId  = null;
+
+/* =========================
    == USER / AUTH ==
 ========================= */
+const home = $('home');
 const btnAddUser = $('addUser');
 const btnDelUser = $('delUser');
 const user = $('username');
@@ -99,8 +113,23 @@ btnAddUser.onclick = async ()=>{
 
   if(!u || !t || !a) return err('Silakan isi data dg lengkap');
 
+  const inv = await getInvoice();
+  const exist = inv.some(v => v.telphone === t);
+
+  if(exist){
+    const c = await Swal.fire({
+      icon:'warning',
+      title:'Data sudah ada',
+      text:'Nomor ini sudah pernah transaksi. Lanjutkan login?',
+      showCancelButton:true,
+      confirmButtonText:'Lanjutkan',
+      cancelButtonText:'Batal'
+    });
+    if(!c.isConfirmed) return;
+  }
+
   const role = u.toLowerCase()==='admin' ? 'admin' : 'user';
-  setSession({role,username:u,phone:t,address:a});
+  setSession({role,user:u,telp:t,addr:a});
 
   ok(`Login sebagai ${role.toUpperCase()}`);
   m.hide('#formUser');
@@ -109,17 +138,17 @@ btnAddUser.onclick = async ()=>{
   loadProduct();
   tableOrder();
 };
-
 btnDelUser.onclick = async ()=>{
-  delSession();
-  location.reload();
+  const s = getSession();
+  if(!s){
+    m.hide('#pageProduct');
+    m.show('#formUser');
+    return;
+  }else{
+    delSession();
+    location.reload();
+  }
 };
-
-/* =========================
-   == STATE ==
-========================= */
-let imgData = null;
-let editId  = null;
 
 /* =========================
    == ELEMENT ==
@@ -174,13 +203,11 @@ function applyRole(){
 function viewPicture(input){
   const f = input.files[0];
   if(!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    imgData = r.result;
-    vew.src = imgData;
-    vew.classList.remove('d-none');
-  };
-  r.readAsDataURL(f);
+  imgData = f; // simpan blob langsung
+  const url = blobToURL(f);
+  vew.src = url;
+  vew.onload = ()=> revokeURL(url);
+  vew.classList.remove('d-none');
 }
 
 /* =========================
@@ -200,7 +227,7 @@ async function saveProduct(){
     pdc: name,
     prc: price,
     stk: stock,
-    img: imgData || vew.src || ''
+    img: imgData || null // blob
   };
 
   if(editId){
@@ -247,10 +274,12 @@ async function loadProduct(){
     return;
   }
 
-  el.innerHTML = product.map(p => `
-    <div class="d-flex justify-content-between align-items-center bg-success-subtle my-2 p-2 rounded">
-      <img src="${p.img||''}" style="object-fit:cover;width:120px;height:90px;border-radius:.5rem"/>
-      <div class="d-flex flex-column text-center w-50">
+  el.innerHTML = product.map(p=>{
+    const url = p.img ? blobToURL(p.img) : '';
+    return `
+    <div class="d-flex justify-content-between align-items-center my-2 p-2 rounded">
+      <img src="${url}" onload="revokeURL('${url}')" style="object-fit:cover;width:120px;height:90px;border-radius:.5rem"/>
+      <div class="d-flex flex-column text-center text-white text-dark w-50">
         <p class="fw-bolder m-0">${p.pdc}</p>
         <p class="m-0">Harga: Rp ${rp(p.prc)}</p>
         <p class="m-0">Stock: ${p.stk}</p>
@@ -267,9 +296,11 @@ async function loadProduct(){
         </div>
       </div>
     </div>
-  `).join('');
+    `;
+  }).join('');
   
   btnInv.textContent= `${isAdmin ? 'Invoice' : 'Riwayat Transaksi'}`;
+  btnInv.className =`${!s ? 'btn btn-outline-light d-none' : 'btn btn-outline-light'}`;
 }
 
 /* =========================
@@ -291,7 +322,9 @@ async function editProduct(id){
   stk.value = p.stk;
 
   if(p.img){
-    vew.src = p.img;
+    const url = blobToURL(p.img);
+    vew.src = url;
+    vew.onload = ()=> revokeURL(url);
     vew.classList.remove('d-none');
   }
 
@@ -320,8 +353,17 @@ async function editProduct(id){
 ========================= */
 async function enterOrder(id){
   const s = getSession();
-  if(s?.role!=='user') return err('Hanya user yang dapat order');
-
+  if(s?.role!=='user'){
+    const c = await Swal.fire({
+      icon:'warning',
+      text:'Silakan isi data sebelum order !',
+      showCancelButton:true
+    });
+    if(!c.isConfirmed) return;
+    m.hide('#pageProduct');
+    m.show('#formUser');
+  } else {
+  
   const product = await getProduct();
   const order   = await getOrder();
 
@@ -341,6 +383,7 @@ async function enterOrder(id){
   ok('Masuk cart');
   loadProduct();
   tableOrder();
+  }
 }
 
 /* =========================
@@ -366,133 +409,21 @@ async function tableOrder(){
   let total=0,no=1;
 
   el.innerHTML = `
-  <table class="tableOrder">
-    <thead>
-      <tr>
-        <th rowspan="2">No</th>
-        <th rowspan="2">Produk</th>
-        <th rowspan="2">Jml</th>
-        <th colspan="2">Harga</th>
-      </tr>
-      <tr>
-        <th>Satuan</th>
-        <th>Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${order.map(v=>{
-        const sub=v.prc*v.qty; total+=sub;
-        return `
-        <tr data-id="${v.id}">
-          <td>${no++}</td>
-          <td>${v.pdc}</td>
-          <td class="pointer fw-bolder">${v.qty}</td>
-          <td>${rp(v.prc)}</td>
-          <td>${rp(sub)}</td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-    <tfoot>
-      <tr>
-        <th colspan="3">TOTAL</th>
-        <th colspan="2">Rp ${rp(total)}</th>
-      </tr>
-    </tfoot>
-  </table>`;
-
-  el.querySelectorAll('tbody tr').forEach(tr=>{
-    tr.onclick = async ()=>{
-      const id = +tr.dataset.id;
-      const order = await getOrder();
-      const or = order.find(x=>x.id===id);
-      if(!or) return;
-
-      const r = await Swal.fire({
-        title:or.pdc,
-        text:'Pilih aksi',
-        icon:'question',
-        showCancelButton:true,
-        confirmButtonText:'Edit Jml Product',
-        cancelButtonText:'Hapus',
-        reverseButtons:true
-      });
-
-      if(r.isConfirmed){
-        const {value:qty} = await Swal.fire({
-          title:'Ubah Jumlah Product',
-          input:'number',
-          inputValue:or.qty,
-          inputAttributes:{min:1},
-          showCancelButton:true,
-          inputValidator:v=>!v||v<1?'Qty minimal 1':null
-        });
-        if(!qty) return;
-
-        const product = await getProduct();
-        const pr = product.find(p=>p.id===or.productId);
-        if(qty>pr.stk) return err('Stock tidak cukup');
-
-        or.qty = +qty;
-        await setOrder(or);
-        tableOrder();
-      }
-
-      if(r.dismiss===Swal.DismissReason.cancel){
-        const c = await Swal.fire({
-          icon:'warning',
-          text:'Yakin hapus item?',
-          showCancelButton:true,
-          confirmButtonText:'Ya, hapus'
-        });
-        if(!c.isConfirmed) return;
-        await delOrder(id);
-        tableOrder();
-      }
-    };
-  });
-
-  enter.classList.remove('d-none');
-  enter.onclick = makeInvoice;
-}
-
-/* =========================
-   == CHECKOUT ==
-========================= */
-async function tableOrder(){
-  const s = getSession();
-  if(s?.role!=='user'){
-    table.innerHTML='';
-    enter.classList.add('d-none');
-    return;
-  }
-
-  const el = $('tableOrder');
-  el.innerHTML = '';
-
-  const order = await getOrder();
-  if(!order.length){
-    enter.classList.add('d-none');
-    return;
-  }
-
-  let total=0,no=1;
-
-  el.innerHTML = `
   <div class="px-2" style="font-size:.75rem">
     <div class="row">
       <div class="col-3">Nama</div>
       <div class="col-1">:</div>
-      <div class="col-8 fw-bolder">${s.username}</div>
+      <div class="col-8 fw-bolder">${s.user}</div>
     </div>
     <div class="row">
       <div class="col-3">Phone</div>
       <div class="col-1">:</div>
-      <div class="col-8">${s.phone}</div>
+      <div class="col-8 text-primary">${s.telp}</div>
     </div>
     <div class="row">
       <div class="col-3">Alamat</div>
       <div class="col-1">:</div>
-      <div class="col-8">${s.address}</div>
+      <div class="col-8">${s.addr}</div>
     </div>
   </div>
   <table class="tableOrder">
@@ -607,30 +538,40 @@ async function makeInvoice(){
   showLoading();
   enter.classList.add('d-none');
 
-  /* === UPDATE STOCK === */
-  const product = await getProduct();
-  for(const v of order){
-    const p = product.find(x=>x.id===v.productId);
-    if(!p) continue;
-    p.stk = Math.max(0, p.stk - v.qty);
-    await setProduct(p);
+  try{
+    /* === UPDATE STOCK === */
+    const product = await getProduct();
+    for(const v of order){
+      const p = product.find(x=>x.id===v.productId);
+      if(!p) continue;
+      p.stk = Math.max(0, p.stk - v.qty);
+      await setProduct(p);
+    }
+
+    /* === CAPTURE → BLOB === */
+    const canvas = await html2canvas(table,{scale:1});
+    const blob = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.7));
+
+    await addInvoice({
+      timestamp: times,
+      username : s.user,
+      telphone : s.telp,
+      address  : s.addr,
+      img      : blob
+    });
+
+    await removeAll();
+    table.innerHTML='';
+    ok('Checkout berhasil!');
+    loadProduct();
+    loadInvoice();
+    m.hide('#pageProduct');
+    m.show('#invoice');
+  }catch(e){
+    err('Gagal membuat invoice');
+  }finally{
+    hideLoading();
   }
-
-  /* === CAPTURE INVOICE === */
-  const canvas = await html2canvas(table,{scale:1});
-  const img = canvas.toDataURL('image/png');
-  const timestamp = new Date().toLocaleString('id-ID',{weekday:'long',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'
-  });
-
-  await addInvoice({timestamp,img});
-  await removeAll();
-  
-  table.innerHTML='';
-  hideLoading();
-  ok('Checkout berhasil!');
-  loadProduct();
-  loadInvoice();
-  m.show('#invoice');
 }
 
 /* == LOAD INVOICE == */
@@ -644,13 +585,18 @@ async function loadInvoice(){
   const s = getSession();
   const isAdmin = s?.role === 'admin';
 
-  el.innerHTML = inv.reverse().map(v=>`
-    <div class="card mb-2 px-1 position-relative">
-				<div class="fw-bolder text-end mt-2 pe-2" style="font-size:.55rem">${v.timestamp}</div>
-      <img src="${v.img}" class="img-fluid my-2 pointer w-auto" onclick="viewInvoice('${v.img}')">
+  const data = isAdmin ? inv : inv.filter(x=>x.telphone === s?.telp);
+
+  el.innerHTML = data.reverse().map(v=>{
+    const url = blobToURL(v.img);
+    return `
+    <div class="card mb-2 px-1 position-relative text-bg-light">
+      <div class="fw-bolder text-end mt-2 pe-2" style="font-size:.55rem">${v.timestamp}</div>
+      <img src="${url}" class="img-fluid my-2 pointer w-auto" onload="revokeURL('${url}')">
       ${isAdmin ? `<span class="badge bg-danger pointer position-absolute top-0 start-0 m-1" data-id="${v.id}">Hapus</span>` : ``}
     </div>
-  `).join('');
+    `;
+  }).join('');
 
   if(isAdmin){
     el.querySelectorAll('[data-id]').forEach(b=>{
@@ -670,25 +616,15 @@ async function loadInvoice(){
   }
 }
 
-function viewInvoice(src){
-  Swal.fire({
-    imageUrl: src,
-    showConfirmButton:false,
-    background:'transparent',
-    padding:0
-  });
-}
-
 /* =========================
    == INIT ==
 ========================= */
 (async()=>{
   await openDB();
   const s = getSession();
-  if(!s){
-    m.show('#formUser');
-    return;
-  }
+  btnDelUser.textContent = `${!s ? 'Login' : 'logout' }`;
+  btnDelUser.className = `${!s ? 'badge pointer bg-success' : 'badge pointer bg-danger' }`; 
+  home.classList.add('d-none');
   m.show('#pageProduct');
   applyRole();
   loadProduct();
